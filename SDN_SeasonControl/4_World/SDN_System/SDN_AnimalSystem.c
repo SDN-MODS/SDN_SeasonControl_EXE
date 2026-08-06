@@ -11,24 +11,24 @@ modded class AnimalBase
     {
         super.EEInit();
 
-        // Apenas no servidor
-        if (GetGame().IsServer())
+        // Apenas rodamos a lógica no Servidor e se o animal estiver de fato vivo
+        if (GetGame().IsServer() && IsAlive())
         {
             SDN_SeasonManager manager = SDN_SeasonManager.GetInstance();
-            
-            // Verifica se o manager existe
-            if (manager)
+
+            if (manager && !manager.IsAnimalAllowed(this.GetType()))
             {
-                string myType = this.GetType();
-                
-                // Pergunta ao manager se este animal é permitido hoje
-                if (!manager.IsAnimalAllowed(myType))
-                {
-                    // CRASH FIX: Não podemos usar ObjectDelete(this) diretamente aqui,
-                    // pois o animal ainda está inicializando (EEInit).
-                    // Agendamos a deleção para 1ms depois (próximo frame).
-                    GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(GetGame().ObjectDelete, 1, false, this);
-                }
+                // SÊNIOR FIX: Não excluímos imediatamente (evita crash do EEInit).
+                // 1. Ocultamos o animal no limbo (joga pro fundo do mapa) para os jogadores não verem ele aparecer e sumir.
+                vector currentPos = this.GetPosition();
+                this.SetPosition(Vector(currentPos[0], -1000.0, currentPos[2]));
+
+                // 2. Avisamos a CE (Central Economy) para remover esse objeto na próxima limpeza (3 segundos).
+                this.SetLifetime(3.0);
+
+                // 3. Garantimos a exclusão forçada, mas segura, após 3 segundos,
+                // dando tempo pro objeto estabilizar na rede antes de ser deletado.
+                GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(GetGame().ObjectDelete, 3000, false, this);
             }
         }
     }

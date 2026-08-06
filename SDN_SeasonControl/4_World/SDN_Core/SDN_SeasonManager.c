@@ -24,14 +24,10 @@ class SDN_SeasonManager
     protected ref SDN_SeasonConfig m_Config;
     protected ref SDN_SeasonSaveData m_Data;
 
-    // --- RPCs ---
-    static const int RPC_SEND_MESSAGE = 894712;
-    static const int RPC_SYNC_SEASON_DATA = 894714;
-    static const int RPC_PLAY_SOUND = 894715;
-
     // --- TIMERS ---
     protected const float UPDATE_INTERVAL = 60.0;
     protected float m_TimeAccumulator;
+    protected float m_WeatherUpdateAccumulator;
 
     protected float m_NotificationAccumulator;
     protected int m_CurrentNotificationIndex;
@@ -54,6 +50,7 @@ class SDN_SeasonManager
         m_LoggingInitialized = false;
         m_LogFilePath = "";
         m_NotificationAccumulator = 0.0;
+        m_WeatherUpdateAccumulator = 0.0;
         m_CurrentNotificationIndex = 0;
         
         // PADRÃO: O Mod começa licenciado/livre.
@@ -171,13 +168,26 @@ class SDN_SeasonManager
         }
 
         m_TimeAccumulator = m_TimeAccumulator + 1.0;
+        m_WeatherUpdateAccumulator = m_WeatherUpdateAccumulator + 1.0;
         
         if (m_TimeAccumulator >= UPDATE_INTERVAL)
         {
             CheckSeasonProgression();
-            ApplyWeather(false);
             ApplyDateAndMoon();
             m_TimeAccumulator = 0;
+        }
+
+        // Aguarda a interpolação climática terminar antes de tentar atualizar de novo
+        float smoothTime = GetInterpolatedValue("SmoothTime");
+        if (smoothTime < 10.0)
+        {
+            smoothTime = 180.0;
+        }
+
+        if (m_WeatherUpdateAccumulator >= smoothTime)
+        {
+            ApplyWeather(false);
+            m_WeatherUpdateAccumulator = 0.0;
         }
 
         m_NotificationAccumulator = m_NotificationAccumulator + 1.0;
@@ -258,7 +268,7 @@ class SDN_SeasonManager
         {
             ScriptRPC rpcSound = new ScriptRPC();
             rpcSound.Write(SDN_SOUND);
-            rpcSound.Send(null, RPC_PLAY_SOUND, true, identity);
+            rpcSound.Send(null, SDN_Consts.RPC_PLAY_SOUND, true, identity);
         }
 
         StringLocaliser titleLoc = new StringLocaliser(notif.Title);
@@ -1100,7 +1110,7 @@ class SDN_SeasonManager
         {
             ScriptRPC rpc = new ScriptRPC();
             rpc.Write(msg);
-            rpc.Send(targetPlayer, RPC_SEND_MESSAGE, true, identity);
+            rpc.Send(targetPlayer, SDN_Consts.RPC_SEND_MESSAGE, true, identity);
         }
     }
 
@@ -1147,7 +1157,7 @@ class SDN_SeasonManager
             rpc.Write(m_Data.SeasonStartTimestamp);
             rpc.Write(m_Config.SeasonDurationMinutes);
             
-            rpc.Send(targetPlayer, RPC_SYNC_SEASON_DATA, true, identity);
+            rpc.Send(targetPlayer, SDN_Consts.RPC_SYNC_SEASON_DATA, true, identity);
         }
     }
 
@@ -1169,7 +1179,7 @@ class SDN_SeasonManager
 
     void OnRPC(PlayerIdentity sender, int rpc_type, ParamsReadContext ctx)
     {
-        if (rpc_type == RPC_SYNC_SEASON_DATA)
+        if (rpc_type == SDN_Consts.RPC_SYNC_SEASON_DATA)
         {
             int idx; 
             
@@ -1209,7 +1219,7 @@ class SDN_SeasonManager
             m_ClientStartTimestamp = startTime;
             m_ClientDurationMinutes = duration;
         }
-        else if (rpc_type == RPC_SEND_MESSAGE)
+        else if (rpc_type == SDN_Consts.RPC_SEND_MESSAGE)
         {
             string msg; 
             
@@ -1221,7 +1231,7 @@ class SDN_SeasonManager
             ChatMessageEventParams chatParams = new ChatMessageEventParams(CCSystem, "SDN System", msg, "");
             GetGame().GetMission().OnEvent(ChatMessageEventTypeID, chatParams);
         }
-        else if (rpc_type == RPC_PLAY_SOUND)
+        else if (rpc_type == SDN_Consts.RPC_PLAY_SOUND)
         {
             string soundFile; 
             
