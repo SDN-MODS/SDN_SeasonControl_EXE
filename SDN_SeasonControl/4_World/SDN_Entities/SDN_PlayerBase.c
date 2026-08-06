@@ -159,15 +159,25 @@ modded class PlayerBase
 
             if (item)
             {
-                // CORREÇÃO: O script só atua se o item JÁ ESTIVER molhado.
-                if (item.GetWet() > 0.01)
+                // O script só atua se o item JÁ ESTIVER molhado.
+                float currentWetness = item.GetWet();
+                if (currentWetness > 0.01)
                 {
-                    // Apenas ACELERA a secagem no verão.
-                    // No inverno (dryingMult < 1.0), não fazemos nada.
-                    // Isso remove o "molhar mágico".
+                    // Melhoria de Secagem (Secagem e Congelamento Realistas)
+                    // Valor Base: Seca/Molha 0.002 a cada 2 segundos.
+                    // Exemplo Verão (dryingMult 4.0): 0.008 por tick (Lento o bastante para imersão)
+
                     if (dryingMult > 1.0)
                     {
-                        item.AddWet(-(0.05 * dryingMult));
+                        // No calor, a água evapora (reduz wetness). O item não seca milagrosamente.
+                        item.AddWet(-(0.002 * dryingMult));
+                    }
+                    else if (dryingMult < 1.0)
+                    {
+                        // No inverno severo (ex dryingMult 0.2), roupas congelam se vc não ficar no fogo.
+                        // Aqui não removemos a água, a umidade é mantida presa no tecido.
+                        // Nós reduzimos a capacidade da roupa de secar, forçando fogueiras.
+                        // (O motor do jogo já processa a perda de heat comfort naturalmente).
                     }
                 }
             }

@@ -231,7 +231,8 @@ class SDN_SeasonManager
         {
             if (curr.SeasonNotifications.Count() > 0)
             {
-                if (m_CurrentNotificationIndex >= curr.SeasonNotifications.Count())
+                // PROTEÇÃO SÊNIOR (Null Pointer / Out of Bounds no Reload)
+                if (m_CurrentNotificationIndex < 0 || m_CurrentNotificationIndex >= curr.SeasonNotifications.Count())
                 {
                     m_CurrentNotificationIndex = 0;
                 }
