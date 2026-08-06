@@ -694,41 +694,37 @@ class SDN_SeasonManager
             weather.GetOvercast().Set(Math.RandomFloat(tOvcMin, tOvcMax), smoothTime);
         }
 
-        // 2. Vento
-        if (tWind <= 0.05)
+        // 2. Vento (Nova Lógica Dinâmica e Orgânica)
+        float windTarget = tWind;
+
+        // Garantir sempre uma brisa mínima para o mundo não parecer travado/morto
+        if (windTarget < 0.05)
         {
-            weather.GetWindMagnitude().SetLimits(0.0, 0.0);
-            weather.GetWindMagnitude().Set(0.0, smoothTime);
+            windTarget = 0.05;
         }
-        else
+
+        // Criar uma margem de oscilação baseada no alvo
+        // (Ventos fortes variam muito, ventos fracos variam pouco)
+        float wMin = windTarget * 0.5; // Mínimo é a metade do alvo
+        float wMax = windTarget * 1.5; // Máximo é 50% a mais do alvo
+
+        if (wMax > 1.0)
         {
-            float wMin = 0.0; 
-            float wMax = 1.0;
-            
-            if (tWind > 0.7) 
-            { 
-                wMin = 0.85; 
-                wMax = 1.0; 
-            }
-            else 
-            { 
-                wMin = tWind - 0.1; 
-                wMax = tWind + 0.1; 
-            }
-
-            if (wMin < 0.1) 
-            {
-                wMin = 0.1;
-            }
-
-            if (wMax > 1.0) 
-            {
-                wMax = 1.0;
-            }
-
-            weather.GetWindMagnitude().SetLimits(wMin, wMax);
-            weather.GetWindMagnitude().Set(tWind, smoothTime);
+            wMax = 1.0;
         }
+
+        // Deixar o DayZ fazer o trabalho natural dele dentro da margem
+        weather.GetWindMagnitude().SetLimits(wMin, wMax);
+
+        // Ao invés de travar o vento fixamente no 'windTarget',
+        // deixamos ele sortear algo próximo (Variação Nativa)
+        float randomWind = Math.RandomFloat(windTarget * 0.8, windTarget * 1.2);
+        if (randomWind > 1.0)
+        {
+            randomWind = 1.0;
+        }
+
+        weather.GetWindMagnitude().Set(randomWind, smoothTime);
 
         // 3. Chuva
         weather.GetRain().SetLimits(0.0, 1.0);
