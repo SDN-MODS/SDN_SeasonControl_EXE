@@ -1,0 +1,851 @@
+// ============================================================================
+// PASTA: 4_World/SDN_Core
+// ARQUIVO: SDN_SeasonManager.c
+// DESCRIÇÃO: Manager Final (Fauna + Clima Suave + Intensidades).
+// CORREÇÃO: Fix do flash de luz (SmoothTime) e controle de neblina. Zero One-Liners.
+// ============================================================================
+
+class SDN_SeasonManager
+{
+    private static ref SDN_SeasonManager m_Instance;
+    
+    protected ref SDN_SeasonConfig m_Config;
+    protected ref SDN_SeasonSaveData m_Data;
+    
+    static const int RPC_SEND_MESSAGE = 894712; 
+    static const int RPC_SYNC_SEASON_DATA = 894714;
+    
+    protected const float UPDATE_INTERVAL = 60.0;
+    protected float m_TimeAccumulator;
+    
+    protected int m_ClientCurrentSeasonIndex;
+    protected ref SDN_SeasonSettings m_ClientCurrentSettings;
+    protected int m_ClientStartTimestamp; 
+    protected int m_ClientDurationMinutes;
+
+    void SDN_SeasonManager()
+    {
+        m_Config = new SDN_SeasonConfig();
+        m_Data = new SDN_SeasonSaveData();
+        m_ClientCurrentSettings = null;
+    }
+
+    static SDN_SeasonManager GetInstance()
+    {
+        if (!m_Instance)
+        {
+            m_Instance = new SDN_SeasonManager();
+        }
+        return m_Instance;
+    }
+
+    void Init()
+    {
+        if (GetGame().IsServer())
+        {
+            GetGame().GetWeather().MissionWeather(false);
+
+            LoadConfig();
+            LoadPersistence();
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(this.OnUpdateTimer, 1000, true);
+            Log("Servidor: SDN Manager Iniciado. MissionWeather Desativado.");
+            
+            ApplyWeather(true);
+            ApplyDateAndMoon();
+        }
+    }
+
+    void OnUpdateTimer()
+    {
+        if (!GetGame().IsServer()) 
+        {
+            return;
+        }
+
+        m_TimeAccumulator += 1.0;
+        
+        if (m_TimeAccumulator >= UPDATE_INTERVAL)
+        {
+            CheckSeasonProgression();
+            ApplyWeather(false);
+            ApplyDateAndMoon(); 
+            m_TimeAccumulator = 0;
+        }
+    }
+
+    // --- UTILS ---
+    int GetTimestamp() 
+    { 
+        return CF_Date.Now().GetTimestamp(); 
+    }
+
+    int GetSecondsRemaining()
+    {
+        int start = 0; 
+        int duration = 0;
+
+        if (GetGame().IsServer()) 
+        { 
+            start = m_Data.SeasonStartTimestamp; 
+            duration = m_Config.SeasonDurationMinutes; 
+        }
+        else 
+        { 
+            start = m_ClientStartTimestamp; 
+            duration = m_ClientDurationMinutes; 
+        }
+
+        int current = GetTimestamp();
+        int end = start + (duration * 60);
+        return end - current;
+    }
+
+    void CheckSeasonProgression()
+    {
+        int current = GetTimestamp();
+        int elapsedMinutes = (current - m_Data.SeasonStartTimestamp) / 60;
+
+        if (elapsedMinutes >= m_Config.SeasonDurationMinutes) 
+        {
+            AdvanceSeason();
+        }
+    }
+
+    float GetTransitionFactor()
+    {
+        int start = 0; 
+        int duration = 0; 
+        float pct = 0.2;
+
+        if (GetGame().IsServer()) 
+        { 
+            start = m_Data.SeasonStartTimestamp; 
+            duration = m_Config.SeasonDurationMinutes; 
+            pct = m_Config.TransitionPercent; 
+        }
+        else 
+        { 
+            start = m_ClientStartTimestamp; 
+            duration = m_ClientDurationMinutes; 
+        }
+
+        if (duration == 0)
+        {
+            return 0.0;
+        }
+        
+        if (pct <= 0.001)
+        {
+            return 0.0;
+        }
+        
+        float fCurrent = (float)GetTimestamp();
+        float fStart = (float)start;
+        float fDuration = (float)duration;
+        
+        float fElapsed = (fCurrent - fStart) / 60.0;
+        float fTransStart = fDuration * (1.0 - pct);
+
+        if (fElapsed < fTransStart) 
+        {
+            return 0.0;
+        }
+        
+        float fTransDur = fDuration - fTransStart;
+        
+        if (fTransDur <= 0.01) 
+        {
+            return 1.0;
+        }
+
+        float result = (fElapsed - fTransStart) / fTransDur;
+        return Math.Clamp(result, 0.0, 1.0);
+    }
+
+    SDN_SeasonSettings GetNextSeasonSettings()
+    {
+        int idx = 0;
+        
+        if (GetGame().IsServer()) 
+        {
+            idx = m_Data.CurrentSeasonIndex;
+        }
+        else 
+        {
+            idx = m_ClientCurrentSeasonIndex;
+        }
+
+        int next = idx + 1;
+        
+        if (next > 3) 
+        {
+            next = 0;
+        }
+        
+        if (GetGame().IsServer()) 
+        {
+            return m_Config.Seasons.Get(next);
+        }
+        
+        return m_ClientCurrentSettings;
+    }
+
+    void AdvanceSeason()
+    {
+        m_Data.CurrentSeasonIndex++;
+        
+        if (m_Data.CurrentSeasonIndex > 3) 
+        {
+            m_Data.CurrentSeasonIndex = 0;
+        }
+        
+        m_Data.SeasonStartTimestamp = GetTimestamp();
+        SavePersistence();
+        Log("Nova Estacao: " + GetCurrentSeasonName());
+        SyncToAllClients();
+        ApplyWeather(true);
+        ApplyDateAndMoon(); 
+    }
+
+    void ForceSeasonIndex(int index)
+    {
+        m_Data.CurrentSeasonIndex = index;
+        m_Data.SeasonStartTimestamp = GetTimestamp(); 
+        SavePersistence();
+        SyncToAllClients();
+        ApplyWeather(true);
+        ApplyDateAndMoon();
+    }
+
+    // --- CLIMA E LUA E MÊS ---
+    void ApplyDateAndMoon()
+    {
+        SDN_SeasonSettings curr = m_Config.Seasons.Get(m_Data.CurrentSeasonIndex);
+        
+        int y, m, d, h, mn;
+        GetGame().GetWorld().GetDate(y, m, d, h, mn);
+        
+        float currentMonth = (float)curr.SeasonMonth;
+        float targetDay = (float)d; 
+        
+        float lerp = GetTransitionFactor();
+
+        if (lerp > 0.01)
+        {
+            SDN_SeasonSettings next = GetNextSeasonSettings();
+            float nextMonth = (float)next.SeasonMonth;
+            
+            if (nextMonth < currentMonth)
+            {
+                nextMonth += 12.0;
+            }
+            
+            float interpolatedVal = Math.Lerp(currentMonth, nextMonth, lerp);
+            
+            if (interpolatedVal > 12.9)
+            {
+                interpolatedVal -= 12.0;
+            }
+            
+            int finalMonth = (int)interpolatedVal;
+            
+            float fraction = interpolatedVal - finalMonth;
+            int finalDay = (int)(fraction * 28.0) + 1; 
+            
+            currentMonth = (float)finalMonth;
+            targetDay = (float)finalDay;
+        }
+
+        int applyMonth = (int)currentMonth;
+        int applyDay = (int)targetDay;
+
+        if (curr.ForceFullMoon != -1)
+        {
+            if (curr.ForceFullMoon == 1) 
+            {
+                applyDay = 15; // Cheia
+            }
+            else if (curr.ForceFullMoon == 0) 
+            {
+                applyDay = 1; // Nova
+            }
+        }
+        
+        GetGame().GetWorld().SetDate(y, applyMonth, applyDay, h, mn);
+    }
+
+    void ApplyWeather(bool forceChange)
+    {
+        Weather weather = GetGame().GetWeather();
+        
+        // --- LER DO JSON: Configurações de Suavização e Intensidade ---
+        float smoothTime = GetInterpolatedValue("SmoothTime");
+        
+        // Padrão de segurança se o JSON estiver com valor inválido
+        if (smoothTime < 10.0)
+        {
+            smoothTime = 180.0;
+        }
+        
+        if (forceChange)
+        {
+            smoothTime = 0.0;
+        }
+        
+        float tOvcMin = Math.Clamp(GetInterpolatedValue("OvercastMin"), 0.0, 1.0);
+        float tOvcMax = Math.Clamp(GetInterpolatedValue("OvercastMax"), 0.0, 1.0);
+        float tWind = Math.Clamp(GetInterpolatedValue("WindLevel"), 0.0, 1.0);
+        float tRain = Math.Clamp(GetInterpolatedValue("RainChance"), 0.0, 1.0);
+        float tFog = Math.Clamp(GetInterpolatedValue("FogChance"), 0.0, 1.0);
+        
+        // Intensidades (Novos Campos)
+        float tRainMin = Math.Clamp(GetInterpolatedValue("RainIntensityMin"), 0.0, 1.0);
+        float tRainMax = Math.Clamp(GetInterpolatedValue("RainIntensityMax"), 0.0, 1.0);
+        float tFogMin = Math.Clamp(GetInterpolatedValue("FogIntensityMin"), 0.0, 1.0);
+        float tFogMax = Math.Clamp(GetInterpolatedValue("FogIntensityMax"), 0.0, 1.0);
+
+        if (tOvcMin > tOvcMax) 
+        {
+            tOvcMin = tOvcMax;
+        }
+
+        float dice = Math.RandomFloat01();
+        bool isRaining = false;
+        
+        if (dice < tRain)
+        {
+            isRaining = true;
+        }
+
+        // --- NUVENS (FIX DO FLASH) ---
+        // O "Flash" ocorre quando as nuvens mudam muito rápido.
+        // Aqui garantimos que a mudança seja sempre lenta (smoothTime), mesmo se a chuva parar.
+        weather.GetOvercast().SetLimits(0.0, 1.0); 
+        
+        if (isRaining)
+        {
+            weather.GetOvercast().Set(Math.RandomFloat(0.85, 1.0), smoothTime);
+        }
+        else
+        {
+            weather.GetOvercast().Set(Math.RandomFloat(tOvcMin, tOvcMax), smoothTime);
+        }
+        
+        // --- VENTO (FIX DO VENTO ABRUPTO) ---
+        // Agora usa smoothTime para transições suaves.
+        if (tWind <= 0.05) 
+        {
+            weather.GetWindMagnitude().SetLimits(0.0, 0.0);
+            weather.GetWindMagnitude().Set(0.0, smoothTime);
+        }
+        else
+        {
+            float wMin = 0.0;
+            float wMax = 1.0;
+
+            if (tWind > 0.7)
+            {
+                // Vento forte: Oscila no topo
+                wMin = 0.85; 
+                wMax = 1.0;
+            }
+            else
+            {
+                // Vento médio: Oscila ao redor do alvo
+                wMin = tWind - 0.1;
+                wMax = tWind + 0.1;
+            }
+            
+            if (wMin < 0.1) 
+            {
+                wMin = 0.1;
+            }
+            
+            if (wMax > 1.0) 
+            {
+                wMax = 1.0;
+            }
+            
+            weather.GetWindMagnitude().SetLimits(wMin, wMax);
+            weather.GetWindMagnitude().Set(tWind, smoothTime);
+        }
+
+        // --- CHUVA (INTENSIDADE) ---
+        weather.GetRain().SetLimits(0.0, 1.0); 
+        
+        if (isRaining) 
+        {
+            if (m_Data.CurrentSeasonIndex == 3) 
+            { 
+                // Inverno fecha o tempo totalmente
+                weather.GetOvercast().Set(1.0, smoothTime); 
+            }
+            
+            if (tRainMin > tRainMax) 
+            {
+                tRainMin = tRainMax;
+            }
+            
+            // Usa min/max do JSON
+            weather.GetRain().Set(Math.RandomFloat(tRainMin, tRainMax), smoothTime);
+        } 
+        else 
+        {
+            // Para a chuva suavemente
+            weather.GetRain().Set(0.0, smoothTime);
+        }
+        
+        // --- NEBLINA (INTENSIDADE) ---
+        weather.GetFog().SetLimits(0.0, 1.0); 
+        
+        if (dice < tFog) 
+        {
+            if (tFogMin > tFogMax)
+            {
+                tFogMin = tFogMax;
+            }
+            
+            // Usa min/max do JSON
+            weather.GetFog().Set(Math.RandomFloat(tFogMin, tFogMax), smoothTime);
+        }
+        else 
+        {
+            weather.GetFog().Set(0.0, smoothTime);
+        }
+    }
+    
+    // --- GETTERS (TOTALMENTE EXPANDIDOS) ---
+    float GetCurrentBaseTemp() 
+    { 
+        return GetInterpolatedValue("BaseAirTemp"); 
+    }
+
+    float GetTempVariance() 
+    { 
+        return GetInterpolatedValue("TempVariance"); 
+    }
+    
+    float GetWaterMultiplier() 
+    { 
+        return GetInterpolatedValue("Water"); 
+    }
+    
+    float GetEnergyMultiplier() 
+    { 
+        return GetInterpolatedValue("Energy"); 
+    }
+    
+    float GetFoodDecayMultiplier() 
+    { 
+        return GetInterpolatedValue("Food"); 
+    }
+    
+    float GetItemDryingMultiplier() 
+    { 
+        return GetInterpolatedValue("Drying"); 
+    }
+    
+    float GetStaminaRecoveryMultiplier() 
+    { 
+        return GetInterpolatedValue("Stamina"); 
+    }
+    
+    float GetSicknessChance() 
+    { 
+        return GetInterpolatedValue("Sickness"); 
+    }
+
+    float GetInterpolatedValue(string type)
+    {
+        float val = 0.0;
+        SDN_SeasonSettings curr;
+        
+        if (GetGame().IsServer()) 
+        {
+            curr = m_Config.Seasons.Get(m_Data.CurrentSeasonIndex);
+        }
+        else if (m_ClientCurrentSettings) 
+        {
+            curr = m_ClientCurrentSettings;
+        }
+        else 
+        {
+            return 0.0; 
+        }
+
+        // Mapeamento de Variáveis Atual
+        if (type == "BaseAirTemp") 
+        {
+            val = curr.BaseAirTemp;
+        }
+        else if (type == "TempVariance") 
+        {
+            val = curr.TempVariance;
+        }
+        else if (type == "Water") 
+        {
+            val = curr.WaterDepletionMult;
+        }
+        else if (type == "Energy") 
+        {
+            val = curr.EnergyDepletionMult;
+        }
+        else if (type == "Food") 
+        {
+            val = curr.FoodDecayMult;
+        }
+        else if (type == "Drying") 
+        {
+            val = curr.ItemDryingMult;
+        }
+        else if (type == "Stamina") 
+        {
+            val = curr.StaminaRecoveryMult;
+        }
+        else if (type == "Sickness") 
+        {
+            val = curr.SicknessChance;
+        }
+        else if (type == "OvercastMin") 
+        {
+            val = curr.OvercastMin;
+        }
+        else if (type == "OvercastMax") 
+        {
+            val = curr.OvercastMax;
+        }
+        else if (type == "WindLevel") 
+        {
+            val = curr.WindLevel;
+        }
+        else if (type == "RainChance") 
+        {
+            val = curr.RainChance;
+        }
+        else if (type == "FogChance") 
+        {
+            val = curr.FogChance;
+        }
+        else if (type == "RainIntensityMin") 
+        {
+            val = curr.RainIntensityMin;
+        }
+        else if (type == "RainIntensityMax") 
+        {
+            val = curr.RainIntensityMax;
+        }
+        else if (type == "FogIntensityMin") 
+        {
+            val = curr.FogIntensityMin;
+        }
+        else if (type == "FogIntensityMax") 
+        {
+            val = curr.FogIntensityMax;
+        }
+        else if (type == "SmoothTime") 
+        {
+            val = curr.SmoothTime;
+        }
+
+        if (GetGame().IsServer())
+        {
+            float lerp = GetTransitionFactor();
+            if (lerp > 0.01)
+            {
+                SDN_SeasonSettings next = GetNextSeasonSettings();
+                float nextVal = val;
+                
+                // Mapeamento Próxima Estação
+                if (type == "BaseAirTemp") 
+                {
+                    nextVal = next.BaseAirTemp;
+                }
+                else if (type == "TempVariance") 
+                {
+                    nextVal = next.TempVariance;
+                }
+                else if (type == "Water") 
+                {
+                    nextVal = next.WaterDepletionMult;
+                }
+                else if (type == "Energy") 
+                {
+                    nextVal = next.EnergyDepletionMult;
+                }
+                else if (type == "Food") 
+                {
+                    nextVal = next.FoodDecayMult;
+                }
+                else if (type == "Drying") 
+                {
+                    nextVal = next.ItemDryingMult;
+                }
+                else if (type == "Stamina") 
+                {
+                    nextVal = next.StaminaRecoveryMult;
+                }
+                else if (type == "Sickness") 
+                {
+                    nextVal = next.SicknessChance;
+                }
+                else if (type == "OvercastMin") 
+                {
+                    nextVal = next.OvercastMin;
+                }
+                else if (type == "OvercastMax") 
+                {
+                    nextVal = next.OvercastMax;
+                }
+                else if (type == "WindLevel") 
+                {
+                    nextVal = next.WindLevel;
+                }
+                else if (type == "RainChance") 
+                {
+                    nextVal = next.RainChance;
+                }
+                else if (type == "FogChance") 
+                {
+                    nextVal = next.FogChance;
+                }
+                else if (type == "RainIntensityMin") 
+                {
+                    nextVal = next.RainIntensityMin;
+                }
+                else if (type == "RainIntensityMax") 
+                {
+                    nextVal = next.RainIntensityMax;
+                }
+                else if (type == "FogIntensityMin") 
+                {
+                    nextVal = next.FogIntensityMin;
+                }
+                else if (type == "FogIntensityMax") 
+                {
+                    nextVal = next.FogIntensityMax;
+                }
+                else if (type == "SmoothTime") 
+                {
+                    nextVal = next.SmoothTime;
+                }
+
+                val = Math.Lerp(val, nextVal, lerp);
+            }
+        }
+        return val;
+    }
+    
+    string GetCurrentSeasonName() 
+    { 
+        if(GetGame().IsServer()) 
+        {
+            return m_Config.Seasons.Get(m_Data.CurrentSeasonIndex).SeasonName;
+        }
+        if(m_ClientCurrentSettings) 
+        {
+            return m_ClientCurrentSettings.SeasonName;
+        }
+        return "Unknown";
+    }
+
+    void Log(string msg) 
+    { 
+        if (m_Config && m_Config.EnableDebugLogs) 
+        {
+            Print("[SDN_SeasonControl] " + msg); 
+        }
+    }
+    
+    // --- IO E RPC ---
+    void LoadConfig() 
+    { 
+        if (!FileExist(SDN_Consts.CONFIG_DIR)) 
+        {
+            MakeDirectory(SDN_Consts.CONFIG_DIR); 
+        }
+        
+        if (FileExist(SDN_Consts.CONFIG_FILE)) 
+        {
+            JsonFileLoader<SDN_SeasonConfig>.JsonLoadFile(SDN_Consts.CONFIG_FILE, m_Config); 
+        }
+        else 
+        {
+            SaveConfig(); 
+        }
+    }
+    
+    void SaveConfig() 
+    { 
+        JsonFileLoader<SDN_SeasonConfig>.JsonSaveFile(SDN_Consts.CONFIG_FILE, m_Config); 
+    }
+    
+    void LoadPersistence() 
+    { 
+        if (FileExist(SDN_Consts.SAVE_FILE)) 
+        { 
+            JsonFileLoader<SDN_SeasonSaveData>.JsonLoadFile(SDN_Consts.SAVE_FILE, m_Data); 
+            
+            if (m_Data.SeasonStartTimestamp == 0) 
+            {
+                m_Data.SeasonStartTimestamp = GetTimestamp(); 
+            }
+        } 
+        else 
+        { 
+            m_Data.SeasonStartTimestamp = GetTimestamp(); 
+            SavePersistence(); 
+        } 
+    }
+    
+    void SavePersistence() 
+    { 
+        JsonFileLoader<SDN_SeasonSaveData>.JsonSaveFile(SDN_Consts.SAVE_FILE, m_Data); 
+    }
+
+    PlayerBase GetPlayerByIdentity(PlayerIdentity identity)
+    {
+        array<Man> players = new array<Man>;
+        GetGame().GetPlayers(players);
+        
+        foreach(Man p : players) 
+        { 
+            if (p.GetIdentity() == identity) 
+            {
+                return PlayerBase.Cast(p); 
+            }
+        }
+        
+        return null;
+    }
+
+    void SendPrivateMessage(PlayerIdentity identity, string msg)
+    {
+        if (!GetGame().IsServer()) 
+        {
+            return;
+        }
+        
+        PlayerBase targetPlayer = GetPlayerByIdentity(identity);
+        
+        if (targetPlayer) 
+        { 
+            ScriptRPC rpc = new ScriptRPC(); 
+            rpc.Write(msg); 
+            rpc.Send(targetPlayer, RPC_SEND_MESSAGE, true, identity); 
+        }
+    }
+
+    void SyncToPlayer(PlayerIdentity identity)
+    {
+        if (!GetGame().IsServer()) 
+        {
+            return;
+        }
+        
+        PlayerBase targetPlayer = GetPlayerByIdentity(identity);
+        
+        if (targetPlayer) 
+        { 
+            SDN_SeasonSettings current = m_Config.Seasons.Get(m_Data.CurrentSeasonIndex); 
+            ScriptRPC rpc = new ScriptRPC(); 
+            rpc.Write(m_Data.CurrentSeasonIndex); 
+            rpc.Write(current); 
+            rpc.Write(m_Data.SeasonStartTimestamp); 
+            rpc.Write(m_Config.SeasonDurationMinutes); 
+            rpc.Send(targetPlayer, SDN_Consts.RPC_SYNC_SEASON_DATA, true, identity); 
+        }
+    }
+
+    void SyncToAllClients() 
+    { 
+        array<Man> players = new array<Man>; 
+        GetGame().GetPlayers(players); 
+        
+        foreach(Man player : players) 
+        { 
+            SyncToPlayer(player.GetIdentity()); 
+        } 
+    }
+
+    void OnRPC(PlayerIdentity sender, int rpc_type, ParamsReadContext ctx)
+    {
+        if (rpc_type == SDN_Consts.RPC_SYNC_SEASON_DATA)
+        {
+            int idx; 
+            if (!ctx.Read(idx)) 
+            {
+                return;
+            }
+            
+            SDN_SeasonSettings settings; 
+            if (!ctx.Read(settings)) 
+            {
+                return;
+            }
+            
+            int startTime; 
+            if (!ctx.Read(startTime)) 
+            {
+                return;
+            }
+            
+            int duration; 
+            if (!ctx.Read(duration)) 
+            {
+                return;
+            }
+            
+            m_ClientCurrentSeasonIndex = idx; 
+            m_ClientCurrentSettings = settings; 
+            m_ClientStartTimestamp = startTime; 
+            m_ClientDurationMinutes = duration;
+        }
+        else if (rpc_type == RPC_SEND_MESSAGE)
+        {
+            string msg; 
+            if (!ctx.Read(msg)) 
+            {
+                return;
+            }
+            
+            ChatMessageEventParams chatParams = new ChatMessageEventParams(CCSystem, "SDN System", msg, "");
+            GetGame().GetMission().OnEvent(ChatMessageEventTypeID, chatParams);
+        }
+    }
+
+    // --- VERIFICADOR DE ANIMAIS (TOTALMENTE EXPANDIDO) ---
+    bool IsAnimalAllowed(string animalClass)
+    {
+        if (!GetGame().IsServer()) 
+        {
+            return true;
+        }
+
+        SDN_SeasonSettings curr = m_Config.Seasons.Get(m_Data.CurrentSeasonIndex);
+        
+        if (!curr.AllowedAnimals)
+        {
+             return true;
+        }
+        
+        if (curr.AllowedAnimals.Count() == 0)
+        {
+            return true;
+        }
+
+        animalClass.ToLower();
+
+        for (int i = 0; i < curr.AllowedAnimals.Count(); i++)
+        {
+            string allowed = curr.AllowedAnimals.Get(i);
+            allowed.ToLower();
+            
+            if (animalClass.Contains(allowed))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
