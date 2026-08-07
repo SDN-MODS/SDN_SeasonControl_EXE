@@ -796,6 +796,33 @@ class SDN_SeasonManager
         return GetInterpolatedValue("Drying");
     }
 
+    bool IsStaminaModifierEnabled()
+    {
+        if (m_Config)
+        {
+            return m_Config.EnableStaminaModifier;
+        }
+        return true;
+    }
+
+    bool IsFrozenFoodEnabled()
+    {
+        if (m_Config)
+        {
+            return m_Config.EnableFrozenFood;
+        }
+        return true;
+    }
+
+    bool IsAdvancedClimateEnabled()
+    {
+        if (m_Config)
+        {
+            return m_Config.EnableAdvancedClimate;
+        }
+        return true;
+    }
+
     float GetStaminaRecoveryMultiplier()
     {
         return GetInterpolatedValue("Stamina");

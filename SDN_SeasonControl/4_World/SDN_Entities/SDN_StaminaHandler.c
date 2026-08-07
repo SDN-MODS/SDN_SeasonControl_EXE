@@ -11,34 +11,35 @@ modded class StaminaHandler
 {
     override void Update(float deltaT, int pCurrentCommandID)
     {
-        super.Update(deltaT, pCurrentCommandID);
-        
-        // Apenas ajustamos se estiver recuperando stamina
-        if (m_StaminaDelta > 0)
+        // Se a proteção estiver desativada ou Manager off, roda normal
+        SDN_SeasonManager manager = SDN_SeasonManager.GetInstance();
+        if (!manager || !manager.IsStaminaModifierEnabled())
         {
-            SDN_SeasonManager manager = SDN_SeasonManager.GetInstance();
-            if (manager)
+            super.Update(deltaT, pCurrentCommandID);
+            return;
+        }
+
+        // O Vanilla deve ser executado primeiro para definir os deltas e predições base
+        super.Update(deltaT, pCurrentCommandID);
+
+        // ABORDAGEM SÊNIOR: Ao invés de tentar reduzir a taxa de recuperação
+        // e brigar com o código Vanilla (o que causa Jitter e dessincronização no Client),
+        // nós limitamos o MÁXIMO da Stamina do jogador (Cap) de acordo com o clima.
+        // Em dias normais, ele tem 100% de fôlego (StaminaCap normal).
+        // No calor extremo de Verão (staminaMult 0.7), o teto de fôlego cai 30%.
+
+        float staminaMult = manager.GetStaminaRecoveryMultiplier();
+        if (staminaMult < 1.0)
+        {
+            // Pega o CAP que o Vanilla calculou (baseado no peso/equipamento atual)
+            // e corta usando a penalidade do clima.
+            m_StaminaCap = m_StaminaCap * staminaMult;
+
+            // Se o limite novo for menor que a stamina atual, esvazia
+            // suavemente o excesso ou restringe o teto instantaneamente
+            if (m_Stamina > m_StaminaCap)
             {
-                float staminaMult = manager.GetStaminaRecoveryMultiplier();
-                
-                // Se for 0.7 (Verão), a recuperação é cortada em 30%
-                // Se for 1.0 (Normal), mantém
-                // Aplicamos diretamente na stamina atual para ajustar a taxa
-                // Nota: m_StaminaDelta já foi aplicado no super.Update, então precisamos
-                // reverter e aplicar o novo, ou ajustar a próxima.
-                // Maneira mais segura: Ajustar o cap ou regeneração base. 
-                // Mas como delta é local, vamos reduzir o ganho efetivo.
-                
-                if (staminaMult < 1.0)
-                {
-                    // Removemos a parte "extra" que o vanilla adicionou
-                    float added = m_StaminaDelta * deltaT; // O quanto subiu neste frame
-                    float shouldAdd = added * staminaMult;
-                    float difference = added - shouldAdd;
-                    
-                    // Subtrai a diferença para simular recuperação lenta
-                    m_Stamina -= difference;
-                }
+                m_Stamina = m_StaminaCap;
             }
         }
     }

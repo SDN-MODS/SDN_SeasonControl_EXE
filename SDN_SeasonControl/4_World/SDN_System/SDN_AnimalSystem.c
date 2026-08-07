@@ -27,9 +27,15 @@ modded class AnimalBase
                 this.SetLifetime(3.0);
 
                 // 3. Garantimos a exclusão forçada, mas segura, após 3 segundos,
-                // dando tempo pro objeto estabilizar na rede antes de ser deletado.
-                GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(GetGame().ObjectDelete, 3000, false, this);
+                // usando o wrapper para respeitar a sintaxe de delegate do Enforce Script.
+                GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(this.DelayedDelete, 3000, false);
             }
         }
+    }
+
+    // Wrapper para executar o ObjectDelete em CallLater sem quebrar a compilação
+    void DelayedDelete()
+    {
+        GetGame().ObjectDelete(this);
     }
 }
