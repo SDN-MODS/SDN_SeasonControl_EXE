@@ -115,6 +115,28 @@ modded class Environment
         // string logMsg = "[CLIMA] Hora: " + timeInHours + " | Base: " + seasonBase + " | Var: " + variance + " | Solar: " + solarFactor + " | FINAL: " + finalTemp;
         // manager.Log(logMsg);
 
+        // AMORTECEDOR DE TEMPERATURA (LERP)
+        // Previne o Jitter Visual da Setinha do Termômetro na HUD do Cliente.
+        if (!m_Player)
+        {
+            return finalTemp;
+        }
+
+        // Variável protegida customizada atrelada a instância do jogador (injetada no Mod)
+        // Se ela não existir ou estiver muito divergente, forçamos o valor.
+        PlayerBase playerModded = PlayerBase.Cast(m_Player);
+        if (playerModded)
+        {
+            if (playerModded.m_SDN_SmoothedTemp == -99999.0)
+            {
+                playerModded.m_SDN_SmoothedTemp = finalTemp;
+            }
+
+            // Suaviza a transição da temperatura anterior para a nova (2% por tick)
+            playerModded.m_SDN_SmoothedTemp = Math.Lerp(playerModded.m_SDN_SmoothedTemp, finalTemp, 0.02);
+            return playerModded.m_SDN_SmoothedTemp;
+        }
+
         return finalTemp;
     }
 }

@@ -18,16 +18,19 @@ modded class AnimalBase
 
             if (manager && !manager.IsAnimalAllowed(this.GetType()))
             {
-                // SÊNIOR FIX: Não excluímos imediatamente (evita crash do EEInit).
+                // SÊNIOR FIX: Não excluímos usando ObjectDelete ou CallLater pois a Engine
+                // DayZ Central Economy gerencia a limpeza do Lifespan por conta própria e pode
+                // deletar o objeto no lixo antes do timer.
+
                 // 1. Ocultamos o animal no limbo (joga pro fundo do mapa) para os jogadores não verem ele aparecer e sumir.
                 vector currentPos = this.GetPosition();
                 this.SetPosition(Vector(currentPos[0], -1000.0, currentPos[2]));
 
                 // 2. Avisamos a CE (Central Economy) para remover esse objeto na próxima limpeza (3 segundos).
+                // Mantemos ele VIVO, para não quebrar a cota de restock ativa do servidor (impedindo loop de spawn).
                 this.SetLifetime(3.0);
 
-                // 3. Garantimos a exclusão forçada, mas segura, após 3 segundos,
-                // usando o wrapper para respeitar a sintaxe de delegate do Enforce Script.
+                // 3. Garantimos a exclusão forçada segura usando o wrapper.
                 GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(this.DelayedDelete, 3000, false);
             }
         }

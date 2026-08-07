@@ -1181,6 +1181,11 @@ class SDN_SeasonManager
             rpc.Write(m_Data.SeasonStartTimestamp);
             rpc.Write(m_Config.SeasonDurationMinutes);
             
+            // Empacota os Booleanos de Configuração Global para o Cliente
+            rpc.Write(m_Config.EnableStaminaModifier);
+            rpc.Write(m_Config.EnableFrozenFood);
+            rpc.Write(m_Config.EnableAdvancedClimate);
+
             rpc.Send(targetPlayer, SDN_Consts.RPC_SYNC_SEASON_DATA, true, identity);
         }
     }
@@ -1233,6 +1238,12 @@ class SDN_SeasonManager
                 return;
             }
             
+            bool bStamina, bFrozen, bClimate;
+
+            if (!ctx.Read(bStamina)) return;
+            if (!ctx.Read(bFrozen)) return;
+            if (!ctx.Read(bClimate)) return;
+
             SDN_SeasonSettings settings = new SDN_SeasonSettings("Synced");
             JsonSerializer js = new JsonSerializer();
             string jsonError;
@@ -1242,6 +1253,15 @@ class SDN_SeasonManager
             m_ClientCurrentSettings = settings;
             m_ClientStartTimestamp = startTime;
             m_ClientDurationMinutes = duration;
+
+            if (!m_Config)
+            {
+                m_Config = new SDN_SeasonConfig();
+            }
+
+            m_Config.EnableStaminaModifier = bStamina;
+            m_Config.EnableFrozenFood = bFrozen;
+            m_Config.EnableAdvancedClimate = bClimate;
         }
         else if (rpc_type == SDN_Consts.RPC_SEND_MESSAGE)
         {

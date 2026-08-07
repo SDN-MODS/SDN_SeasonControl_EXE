@@ -11,10 +11,14 @@ modded class PlayerBase
     protected float m_SDN_LastWaterLevel;
     protected bool m_SDN_IsDizzy;
 
+    // Variável para amorteçer o jitter termodinâmico do EnvironmentHook
+    float m_SDN_SmoothedTemp;
+
     override void Init()
     {
         super.Init();
         m_SDN_LastWaterLevel = -99999;
+        m_SDN_SmoothedTemp = -99999.0;
         m_SDN_IsDizzy = false;
     }
 
