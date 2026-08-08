@@ -182,6 +182,9 @@ modded class MissionServer
             string action = args[1]; 
             action.ToLower();
             
+            // Log de Auditoria
+            manager.Log("[ADMIN-AUDIT] Admin '" + sender.GetName() + "' (ID: " + sender.GetId() + ") utilizou comando: " + commandLine);
+
             if (action == "status") 
             {
                 // Envia relatorio com temperatura real

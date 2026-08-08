@@ -104,30 +104,46 @@ class SDN_SeasonManager
             return;
         }
 
-        string modsDir = "$profile:SDN_MODS";
-        string logDir = "$profile:SDN_MODS/SDN_Logs";
-
-        if (!FileExist(modsDir))
+        // Utilizando as constantes centralizadas
+        if (!FileExist(SDN_Consts.MODS_DIR))
         {
-            MakeDirectory(modsDir);
+            MakeDirectory(SDN_Consts.MODS_DIR);
         }
         
-        if (!FileExist(logDir))
+        // Pasta intermediária de Logs Genéricos, caso não exista
+        string genericLogDir = "$profile:SDN_MODS/SDN_Logs";
+        if (!FileExist(genericLogDir))
         {
-            MakeDirectory(logDir);
+            MakeDirectory(genericLogDir);
+        }
+
+        // Diretório Específico de Logs do Season Control
+        if (!FileExist(SDN_Consts.LOG_DIR))
+        {
+            MakeDirectory(SDN_Consts.LOG_DIR);
         }
 
         CF_Date now = CF_Date.Now();
         string dateStr = "" + now.GetYear() + "-" + now.GetMonth() + "-" + now.GetDay() + "_" + now.GetHours() + "-" + now.GetMinutes() + "-" + now.GetSeconds();
-        m_LogFilePath = logDir + "/SDN_Log_" + dateStr + ".log";
+        m_LogFilePath = SDN_Consts.LOG_DIR + "/SDN_Log_" + dateStr + ".log";
         
         FileHandle f = OpenFile(m_LogFilePath, FileMode.WRITE);
         if (f)
         {
-            FPrintln(f, "==========================================");
-            FPrintln(f, " SDN SEASON CONTROL - LOG DE SESSAO");
+            FPrintln(f, "========================================================");
+            FPrintln(f, " SDN SEASON CONTROL - RELATORIO AVANCADO DE SESSAO");
             FPrintln(f, " Data: " + dateStr);
-            FPrintln(f, "==========================================");
+            FPrintln(f, "========================================================");
+            FPrintln(f, "");
+            FPrintln(f, "[AVISO DE COMPATIBILIDADE DE REDE (RPC)]");
+            FPrintln(f, "Este mod registrou os seguintes IDs de RPC na rede:");
+            FPrintln(f, " -> " + SDN_Consts.RPC_SYNC_SEASON_DATA + " (Sync)");
+            FPrintln(f, " -> " + SDN_Consts.RPC_ADMIN_CMD_RES + " (Admin)");
+            FPrintln(f, " -> " + SDN_Consts.RPC_SEND_MESSAGE + " (Message)");
+            FPrintln(f, " -> " + SDN_Consts.RPC_PLAY_SOUND + " (Sound)");
+            FPrintln(f, "Se algum outro mod usar estes mesmos IDs, o servidor ");
+            FPrintln(f, "sofrera bugs silenciosos ou crashes de protocolo.");
+            FPrintln(f, "========================================================");
             CloseFile(f);
             m_LoggingInitialized = true;
         }
@@ -478,7 +494,9 @@ class SDN_SeasonManager
 
         m_Data.SeasonStartTimestamp = GetTimestamp();
         SavePersistence();
-        Log("AVANCO DE ESTACAO: Nova Estacao -> " + GetCurrentSeasonName());
+
+        Log("[TELEMETRIA] Nova Estacao Avancada: " + GetCurrentSeasonName());
+        Log("[TELEMETRIA] Temperatura Base Atual: " + GetCurrentBaseTemp() + " Graus (Variance: " + GetTempVariance() + ")");
         
         m_CurrentNotificationIndex = 0;
         
@@ -506,7 +524,8 @@ class SDN_SeasonManager
         ApplyWeather(true);
         ApplyDateAndMoon();
         
-        Log("ESTACAO FORCADA ADMIN: Index -> " + index);
+        Log("[TELEMETRIA] Nova Estacao Forcada Manualmente (Admin): " + GetCurrentSeasonName());
+        Log("[TELEMETRIA] Temperatura Base Atual: " + GetCurrentBaseTemp() + " Graus");
         m_CurrentNotificationIndex = 0;
     }
 
@@ -1070,11 +1089,45 @@ class SDN_SeasonManager
         if (FileExist(SDN_Consts.CONFIG_FILE)) 
         {
             JsonFileLoader<SDN_SeasonConfig>.JsonLoadFile(SDN_Consts.CONFIG_FILE, m_Config);
+            Log("[INFO] Carregando Configuracoes do JSON...");
+            ValidateConfig();
         }
         else 
         {
             SaveConfig();
+            Log("[INFO] Arquivo de configuracao JSON criado (Default).");
         }
+    }
+
+    void ValidateConfig()
+    {
+        if (!m_Config) return;
+
+        if (m_Config.Seasons)
+        {
+            Log("[OK] " + m_Config.Seasons.Count() + " Estacoes Encontradas no JSON.");
+        }
+        else
+        {
+            Log("[ERROR] O Array de Estacoes (Seasons) esta nulo no JSON!");
+        }
+
+        if (!m_Config.EnableStaminaModifier)
+        {
+            Log("[WARNING] O Modificador de Stamina esta DESATIVADO.");
+        }
+
+        if (!m_Config.EnableFrozenFood)
+        {
+            Log("[WARNING] A mecanica de Comida Congelada esta DESATIVADA.");
+        }
+
+        if (!m_Config.EnableAdvancedClimate)
+        {
+            Log("[WARNING] O Clima Avancado (Cordilheiras/Madrugada) esta DESATIVADO.");
+        }
+
+        Log("[INFO] Validacao concluida.");
     }
 
     void SaveConfig() 
