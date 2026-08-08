@@ -874,6 +874,13 @@ class SDN_SeasonManager
 
         if (!curr) 
         {
+            // PROTEÇÃO CRÍTICA (NPE/Fallback):
+            // Se o RPC atrasar, devolver "0" paralisa o jogador, pois a Stamina
+            // multiplicaria por 0.0. Devolver 1.0 (Vanilla) para os essenciais!
+            if (type == "Water" || type == "Energy" || type == "Food" || type == "Drying" || type == "Stamina")
+            {
+                return 1.0;
+            }
             return 0.0;
         }
 
@@ -950,95 +957,96 @@ class SDN_SeasonManager
             val = curr.SmoothTime;
         }
 
-        if (GetGame().IsServer())
-        {
-            float lerp = GetTransitionFactor();
-            
-            if (lerp > 0.01)
-            {
-                SDN_SeasonSettings next = GetNextSeasonSettings();
-                
-                if (next)
-                {
-                    float nextVal = val;
-                    
-                    if (type == "BaseAirTemp")
-                    {
-                        nextVal = next.BaseAirTemp;
-                    }
-                    else if (type == "TempVariance")
-                    {
-                        nextVal = next.TempVariance;
-                    }
-                    else if (type == "Water")
-                    {
-                        nextVal = next.WaterDepletionMult;
-                    }
-                    else if (type == "Energy")
-                    {
-                        nextVal = next.EnergyDepletionMult;
-                    }
-                    else if (type == "Food")
-                    {
-                        nextVal = next.FoodDecayMult;
-                    }
-                    else if (type == "Drying")
-                    {
-                        nextVal = next.ItemDryingMult;
-                    }
-                    else if (type == "Stamina")
-                    {
-                        nextVal = next.StaminaRecoveryMult;
-                    }
-                    else if (type == "Sickness")
-                    {
-                        nextVal = next.SicknessChance;
-                    }
-                    else if (type == "OvercastMin")
-                    {
-                        nextVal = next.OvercastMin;
-                    }
-                    else if (type == "OvercastMax")
-                    {
-                        nextVal = next.OvercastMax;
-                    }
-                    else if (type == "WindLevel")
-                    {
-                        nextVal = next.WindLevel;
-                    }
-                    else if (type == "RainChance")
-                    {
-                        nextVal = next.RainChance;
-                    }
-                    else if (type == "FogChance")
-                    {
-                        nextVal = next.FogChance;
-                    }
-                    else if (type == "RainIntensityMin")
-                    {
-                        nextVal = next.RainIntensityMin;
-                    }
-                    else if (type == "RainIntensityMax")
-                    {
-                        nextVal = next.RainIntensityMax;
-                    }
-                    else if (type == "FogIntensityMin")
-                    {
-                        nextVal = next.FogIntensityMin;
-                    }
-                    else if (type == "FogIntensityMax")
-                    {
-                        nextVal = next.FogIntensityMax;
-                    }
-                    else if (type == "SmoothTime")
-                    {
-                        nextVal = next.SmoothTime;
-                    }
+        // PERMITIR QUE O CLIENTE E O SERVIDOR INTERPOLEM JUNTOS!
+        // Sem essa correção, o Servidor devolvia transições suaves de stamina,
+        // mas o Cliente saltava os valores brutalmente, quebrando a predição (Lag Rubberbanding).
+        float lerp = GetTransitionFactor();
 
-                    val = Math.Lerp(val, nextVal, lerp);
+        if (lerp > 0.01)
+        {
+            SDN_SeasonSettings next = GetNextSeasonSettings();
+            
+            if (next)
+            {
+                float nextVal = val;
+                
+                if (type == "BaseAirTemp")
+                {
+                    nextVal = next.BaseAirTemp;
                 }
+                else if (type == "TempVariance")
+                {
+                    nextVal = next.TempVariance;
+                }
+                else if (type == "Water")
+                {
+                    nextVal = next.WaterDepletionMult;
+                }
+                else if (type == "Energy")
+                {
+                    nextVal = next.EnergyDepletionMult;
+                }
+                else if (type == "Food")
+                {
+                    nextVal = next.FoodDecayMult;
+                }
+                else if (type == "Drying")
+                {
+                    nextVal = next.ItemDryingMult;
+                }
+                else if (type == "Stamina")
+                {
+                    nextVal = next.StaminaRecoveryMult;
+                }
+                else if (type == "Sickness")
+                {
+                    nextVal = next.SicknessChance;
+                }
+                else if (type == "OvercastMin")
+                {
+                    nextVal = next.OvercastMin;
+                }
+                else if (type == "OvercastMax")
+                {
+                    nextVal = next.OvercastMax;
+                }
+                else if (type == "WindLevel")
+                {
+                    nextVal = next.WindLevel;
+                }
+                else if (type == "RainChance")
+                {
+                    nextVal = next.RainChance;
+                }
+                else if (type == "FogChance")
+                {
+                    nextVal = next.FogChance;
+                }
+                else if (type == "RainIntensityMin")
+                {
+                    nextVal = next.RainIntensityMin;
+                }
+                else if (type == "RainIntensityMax")
+                {
+                    nextVal = next.RainIntensityMax;
+                }
+                else if (type == "FogIntensityMin")
+                {
+                    nextVal = next.FogIntensityMin;
+                }
+                else if (type == "FogIntensityMax")
+                {
+                    nextVal = next.FogIntensityMax;
+                }
+                else if (type == "SmoothTime")
+                {
+                    nextVal = next.SmoothTime;
+                }
+
+                val = Math.Lerp(val, nextVal, lerp);
             }
         }
+
         return val;
     }
 

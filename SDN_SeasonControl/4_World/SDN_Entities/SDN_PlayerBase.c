@@ -12,7 +12,7 @@ modded class PlayerBase
     protected bool m_SDN_IsDizzy;
 
     // Variável para amorteçer o jitter termodinâmico do EnvironmentHook
-    float m_SDN_SmoothedTemp;
+    public float m_SDN_SmoothedTemp;
 
     override void Init()
     {
