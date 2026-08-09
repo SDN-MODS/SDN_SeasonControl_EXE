@@ -97,7 +97,6 @@ class SDN_SeasonSettings
 class SDN_SeasonConfig
 {
     bool EnableDebugLogs;
-    bool EnableStaminaModifier;
     bool EnableFrozenFood;
     bool EnableAdvancedClimate;
     int SeasonDurationMinutes;
@@ -113,7 +112,6 @@ class SDN_SeasonConfig
     void SDN_SeasonConfig()
     {
         EnableDebugLogs = true;
-        EnableStaminaModifier = true;
         EnableFrozenFood = true;
         EnableAdvancedClimate = true;
         SeasonDurationMinutes = 1440;

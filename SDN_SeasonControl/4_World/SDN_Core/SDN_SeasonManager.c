@@ -815,15 +815,6 @@ class SDN_SeasonManager
         return GetInterpolatedValue("Drying");
     }
 
-    bool IsStaminaModifierEnabled()
-    {
-        if (m_Config)
-        {
-            return m_Config.EnableStaminaModifier;
-        }
-        return true;
-    }
-
     bool IsFrozenFoodEnabled()
     {
         if (m_Config)
@@ -840,11 +831,6 @@ class SDN_SeasonManager
             return m_Config.EnableAdvancedClimate;
         }
         return true;
-    }
-
-    float GetStaminaRecoveryMultiplier()
-    {
-        return GetInterpolatedValue("Stamina");
     }
 
     float GetSicknessChance()
@@ -1120,11 +1106,6 @@ class SDN_SeasonManager
             Log("[ERROR] O Array de Estacoes (Seasons) esta nulo no JSON!");
         }
 
-        if (!m_Config.EnableStaminaModifier)
-        {
-            Log("[WARNING] O Modificador de Stamina esta DESATIVADO.");
-        }
-
         if (!m_Config.EnableFrozenFood)
         {
             Log("[WARNING] A mecanica de Comida Congelada esta DESATIVADA.");
@@ -1243,7 +1224,6 @@ class SDN_SeasonManager
             rpc.Write(m_Config.SeasonDurationMinutes);
             
             // Empacota os Booleanos de Configuração Global para o Cliente
-            rpc.Write(m_Config.EnableStaminaModifier);
             rpc.Write(m_Config.EnableFrozenFood);
             rpc.Write(m_Config.EnableAdvancedClimate);
 
@@ -1299,9 +1279,8 @@ class SDN_SeasonManager
                 return;
             }
             
-            bool bStamina, bFrozen, bClimate;
+            bool bFrozen, bClimate;
 
-            if (!ctx.Read(bStamina)) return;
             if (!ctx.Read(bFrozen)) return;
             if (!ctx.Read(bClimate)) return;
 
@@ -1320,7 +1299,6 @@ class SDN_SeasonManager
                 m_Config = new SDN_SeasonConfig();
             }
 
-            m_Config.EnableStaminaModifier = bStamina;
             m_Config.EnableFrozenFood = bFrozen;
             m_Config.EnableAdvancedClimate = bClimate;
         }
