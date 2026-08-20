@@ -49,7 +49,6 @@ class SDN_SeasonSettings
     // Sobrevivência
     float FoodDecayMult;
     float ItemDryingMult;
-    float StaminaRecoveryMult;
     float SicknessChance;
 
     int ForceFullMoon;
@@ -84,7 +83,6 @@ class SDN_SeasonSettings
 
         FoodDecayMult = 1.0;
         ItemDryingMult = 1.0;
-        StaminaRecoveryMult = 1.0;
         SicknessChance = 0.1;
         ForceFullMoon = -1;
         SeasonMonth = 7;
@@ -115,7 +113,7 @@ class SDN_SeasonConfig
         EnableFrozenFood = true;
         EnableAdvancedClimate = true;
         SeasonDurationMinutes = 1440;
-        TransitionPercent = 0.2;
+        TransitionPercent = 0.3; // 30% da duracao eh transicao suave
 
         JoinNotificationDelay = 180.0;
         NotificationInterval = 600.0;
@@ -129,8 +127,8 @@ class SDN_SeasonConfig
 
         // --- PRIMAVERA ---
         s = new SDN_SeasonSettings("Spring");
-        s.BaseAirTemp = 18.0;
-        s.TempVariance = 8.0;
+        s.BaseAirTemp = 22.0; // Um pouco quente
+        s.TempVariance = 5.0;
         s.WaterDepletionMult = 1.0;
         s.EnergyDepletionMult = 1.0;
         s.RainChance = 0.3;
@@ -145,7 +143,6 @@ class SDN_SeasonConfig
         s.SmoothTime = 300.0;
         s.FoodDecayMult = 1.5;
         s.ItemDryingMult = 0.8;
-        s.StaminaRecoveryMult = 1.0;
         s.SicknessChance = 0.1;
         s.ForceFullMoon = -1;
         s.SeasonMonth = 5;
@@ -160,8 +157,8 @@ class SDN_SeasonConfig
 
         // --- VERÃO ---
         s = new SDN_SeasonSettings("Summer");
-        s.BaseAirTemp = 42.0;
-        s.TempVariance = 10.0;
+        s.BaseAirTemp = 38.0; // Quente de verdade
+        s.TempVariance = 7.0;
         s.WaterDepletionMult = 2.5;
         s.EnergyDepletionMult = 0.8;
         s.RainChance = 0.1;
@@ -176,7 +173,6 @@ class SDN_SeasonConfig
         s.SmoothTime = 600.0;
         s.FoodDecayMult = 5.0;
         s.ItemDryingMult = 4.0;
-        s.StaminaRecoveryMult = 0.7;
         s.SicknessChance = 0.05;
         s.ForceFullMoon = 1;
         s.SeasonMonth = 7;
@@ -190,8 +186,8 @@ class SDN_SeasonConfig
 
         // --- OUTONO ---
         s = new SDN_SeasonSettings("Autumn");
-        s.BaseAirTemp = 8.0;
-        s.TempVariance = 5.0;
+        s.BaseAirTemp = 5.0; // Um pouco frio
+        s.TempVariance = 4.0;
         s.WaterDepletionMult = 1.0;
         s.EnergyDepletionMult = 1.2;
         s.RainChance = 0.5;
@@ -206,7 +202,6 @@ class SDN_SeasonConfig
         s.SmoothTime = 240.0;
         s.FoodDecayMult = 1.0;
         s.ItemDryingMult = 0.7;
-        s.StaminaRecoveryMult = 1.0;
         s.SicknessChance = 0.3;
         s.ForceFullMoon = 0;
         s.SeasonMonth = 10;
@@ -220,8 +215,8 @@ class SDN_SeasonConfig
 
         // --- INVERNO ---
         s = new SDN_SeasonSettings("Winter");
-        s.BaseAirTemp = -15.0;
-        s.TempVariance = 5.0;
+        s.BaseAirTemp = -18.0; // Frio de vdd
+        s.TempVariance = 6.0;
         s.WaterDepletionMult = 0.8;
         s.EnergyDepletionMult = 2.0;
         s.RainChance = 0.4;
@@ -236,7 +231,6 @@ class SDN_SeasonConfig
         s.SmoothTime = 180.0;
         s.FoodDecayMult = 0.1;
         s.ItemDryingMult = 0.2;
-        s.StaminaRecoveryMult = 0.8;
         s.SicknessChance = 0.6;
         s.ForceFullMoon = 0;
         s.SeasonMonth = 12;

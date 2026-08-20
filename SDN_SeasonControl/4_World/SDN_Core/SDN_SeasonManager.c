@@ -713,36 +713,31 @@ class SDN_SeasonManager
             weather.GetOvercast().Set(Math.RandomFloat(tOvcMin, tOvcMax), smoothTime);
         }
 
-        // 2. Vento (Nova Lógica Dinâmica e Orgânica)
+        // 2. Vento (Nova Lógica Dinâmica e Suave)
         float windTarget = tWind;
 
-        // Garantir sempre uma brisa mínima para o mundo não parecer travado/morto
-        if (windTarget < 0.05)
+        // Garantir sempre uma brisa mínima para a folhagem das árvores nunca travar,
+        // mas sendo sutil (nunca some de vez, e nunca aparece do nada).
+        if (windTarget < 0.15)
         {
-            windTarget = 0.05;
+            windTarget = 0.15;
         }
 
-        // Criar uma margem de oscilação baseada no alvo
-        // (Ventos fortes variam muito, ventos fracos variam pouco)
-        float wMin = windTarget * 0.5; // Mínimo é a metade do alvo
-        float wMax = windTarget * 1.5; // Máximo é 50% a mais do alvo
+        // Criar uma margem de oscilação muito mais apertada.
+        // Se o alvo for 0.5, oscilará levemente entre 0.4 e 0.6, evitando picos.
+        float wMin = windTarget * 0.8;
+        float wMax = windTarget * 1.2;
 
         if (wMax > 1.0)
         {
             wMax = 1.0;
         }
 
-        // Deixar o DayZ fazer o trabalho natural dele dentro da margem
+        // Entregar ao DayZ uma restrição apertada, limitando as rajadas de ar surpresas.
         weather.GetWindMagnitude().SetLimits(wMin, wMax);
 
-        // Ao invés de travar o vento fixamente no 'windTarget',
-        // deixamos ele sortear algo próximo (Variação Nativa)
-        float randomWind = Math.RandomFloat(windTarget * 0.8, windTarget * 1.2);
-        if (randomWind > 1.0)
-        {
-            randomWind = 1.0;
-        }
-
+        // O motor agora sorteará um vento calmo, transicionando pela nuvem do smoothTime
+        float randomWind = Math.RandomFloat(wMin, wMax);
         weather.GetWindMagnitude().Set(randomWind, smoothTime);
 
         // 3. Chuva
@@ -861,9 +856,8 @@ class SDN_SeasonManager
         if (!curr) 
         {
             // PROTEÇÃO CRÍTICA (NPE/Fallback):
-            // Se o RPC atrasar, devolver "0" paralisa o jogador, pois a Stamina
-            // multiplicaria por 0.0. Devolver 1.0 (Vanilla) para os essenciais!
-            if (type == "Water" || type == "Energy" || type == "Food" || type == "Drying" || type == "Stamina")
+            // Se o RPC atrasar, devolver "0" pode ser fatal. Devolver 1.0 para sobrevivencia essencial!
+            if (type == "Water" || type == "Energy" || type == "Food" || type == "Drying")
             {
                 return 1.0;
             }
@@ -893,10 +887,6 @@ class SDN_SeasonManager
         else if (type == "Drying")
         {
             val = curr.ItemDryingMult;
-        }
-        else if (type == "Stamina")
-        {
-            val = curr.StaminaRecoveryMult;
         }
         else if (type == "Sickness")
         {
@@ -944,8 +934,8 @@ class SDN_SeasonManager
         }
 
         // PERMITIR QUE O CLIENTE E O SERVIDOR INTERPOLEM JUNTOS!
-        // Sem essa correção, o Servidor devolvia transições suaves de stamina,
-        // mas o Cliente saltava os valores brutalmente, quebrando a predição (Lag Rubberbanding).
+        // Isso previne que valores ambientais deem saltos no cliente dessincronizando
+        // com as passagens graduais calculadas pelo Servidor.
         float lerp = GetTransitionFactor();
 
         if (lerp > 0.01)
@@ -979,10 +969,6 @@ class SDN_SeasonManager
                 else if (type == "Drying")
                 {
                     nextVal = next.ItemDryingMult;
-                }
-                else if (type == "Stamina")
-                {
-                    nextVal = next.StaminaRecoveryMult;
                 }
                 else if (type == "Sickness")
                 {
