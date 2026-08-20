@@ -22,10 +22,12 @@ class SDN_Consts
     static const string BASE_DIR = "$profile:SDN_MODS/SDN_SeasonControl";
     static const string CONFIG_FILE = "$profile:SDN_MODS/SDN_SeasonControl/SeasonConfig.json";
     static const string SAVE_FILE = "$profile:SDN_MODS/SDN_SeasonControl/SeasonState.json";
-    static const string LOG_DIR = "$profile:SDN_MODS/SDN_SeasonControl/Logs";
+    static const string LOG_DIR = "$profile:SDN_MODS/SDN_Logs/SDN_SeasonControl_Logs";
     static const string ADMIN_FILE = "$profile:SDN_MODS/SDN_SeasonControl/Admins.txt";
 
     // RPC IDs (Certifique-se que no conflitem com outros mods se no usar Frameworks de RPC automtico)
     static const int RPC_SYNC_SEASON_DATA = 894710;
     static const int RPC_ADMIN_CMD_RES = 894711;
+    static const int RPC_SEND_MESSAGE = 894712;
+    static const int RPC_PLAY_SOUND = 894715;
 }

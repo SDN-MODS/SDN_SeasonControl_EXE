@@ -69,17 +69,73 @@ modded class Environment
         // Ex: Base 42 + (-1.0 * 10) = 32 (Meia noite)
         float finalTemp = seasonBase + (solarFactor * variance);
 
-        // (Opcional) Adiciona uma pequena influência da altitude vanilla para realismo em montanhas
-        // Se vanillaTemp for baixo (altitude alta), reduz a temperatura final levemente
-        float altitudeInfluence = (vanillaTemp - 10.0) * 0.3;
-        finalTemp = finalTemp + altitudeInfluence;
+        if (manager.IsAdvancedClimateEnabled())
+        {
+            // MELHORIA A: Cordilheiras Mortais (Frio Severo por Altitude)
+            // No DayZ, posições Y altas representam montanhas.
+            if (m_Player)
+            {
+                PlayerBase p = PlayerBase.Cast(m_Player);
+                if (p)
+                {
+                    float altitude = p.GetPosition()[1]; // Pega o eixo Y
+
+                    if (altitude > 400.0)
+                    {
+                        // A cada 100 metros acima de 400m, o frio dobra o peso.
+                        // Em 800m de altura, a temperatura cai até 12 graus extras.
+                        float heightFactor = (altitude - 400.0) / 100.0;
+                        finalTemp = finalTemp - (heightFactor * 3.0);
+                    }
+                }
+            }
+
+            // MELHORIA B: Choque Térmico Noturno (Madrugada Gélida)
+            // A noite real esfria muito mais que o entardecer. Entre as 0h e 4h, o frio é absoluto.
+            if (timeInHours >= 0.0 && timeInHours <= 4.0)
+            {
+                // Se a base da estação for Inverno/Outono (Frio), a madrugada pune.
+                if (seasonBase < 10.0)
+                {
+                    finalTemp = finalTemp - 6.0; // Queda brusca extra na madrugada
+                }
+            }
+        }
+        else
+        {
+            // Sistema Básico Legado
+            float altitudeInfluence = (vanillaTemp - 10.0) * 0.3;
+            finalTemp = finalTemp + altitudeInfluence;
+        }
 
         // --- DEBUG LOG (DESATIVADO PARA PRODUÇÃO) ---
         // ATENÇÃO: Manter comentado em servidores com muitos jogadores para evitar LAG de disco (I/O).
         // Descomente apenas se precisar diagnosticar problemas de temperatura.
-        
+
         // string logMsg = "[CLIMA] Hora: " + timeInHours + " | Base: " + seasonBase + " | Var: " + variance + " | Solar: " + solarFactor + " | FINAL: " + finalTemp;
         // manager.Log(logMsg);
+
+        // AMORTECEDOR DE TEMPERATURA (LERP)
+        // Previne o Jitter Visual da Setinha do Termômetro na HUD do Cliente.
+        if (!m_Player)
+        {
+            return finalTemp;
+        }
+
+        // Variável protegida customizada atrelada a instância do jogador (injetada no Mod)
+        // Se ela não existir ou estiver muito divergente, forçamos o valor.
+        PlayerBase playerModded = PlayerBase.Cast(m_Player);
+        if (playerModded)
+        {
+            if (playerModded.m_SDN_SmoothedTemp == -99999.0)
+            {
+                playerModded.m_SDN_SmoothedTemp = finalTemp;
+            }
+
+            // Suaviza a transição da temperatura anterior para a nova (2% por tick)
+            playerModded.m_SDN_SmoothedTemp = Math.Lerp(playerModded.m_SDN_SmoothedTemp, finalTemp, 0.02);
+            return playerModded.m_SDN_SmoothedTemp;
+        }
 
         return finalTemp;
     }
