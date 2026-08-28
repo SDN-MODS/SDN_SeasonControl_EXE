@@ -127,14 +127,17 @@ modded class Environment
         PlayerBase playerModded = PlayerBase.Cast(m_Player);
         if (playerModded)
         {
-            if (playerModded.m_SDN_SmoothedTemp == -99999.0)
+            float currentSmoothed = playerModded.GetSDNSmoothedTemp();
+            if (currentSmoothed == -99999.0)
             {
-                playerModded.m_SDN_SmoothedTemp = finalTemp;
+                playerModded.SetSDNSmoothedTemp(finalTemp);
+                return finalTemp;
             }
 
             // Suaviza a transição da temperatura anterior para a nova (2% por tick)
-            playerModded.m_SDN_SmoothedTemp = Math.Lerp(playerModded.m_SDN_SmoothedTemp, finalTemp, 0.02);
-            return playerModded.m_SDN_SmoothedTemp;
+            float newSmoothed = Math.Lerp(currentSmoothed, finalTemp, 0.02);
+            playerModded.SetSDNSmoothedTemp(newSmoothed);
+            return newSmoothed;
         }
 
         return finalTemp;

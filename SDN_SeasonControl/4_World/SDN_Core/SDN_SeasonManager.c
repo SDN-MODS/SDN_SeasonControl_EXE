@@ -104,10 +104,11 @@ class SDN_SeasonManager
             return;
         }
 
-        // Utilizando as constantes centralizadas
-        if (!FileExist(SDN_Consts.MODS_DIR))
+        // Utilizando as constantes localmente para prevenir falso-positivos
+        string modsDir = "$profile:SDN_MODS";
+        if (!FileExist(modsDir))
         {
-            MakeDirectory(SDN_Consts.MODS_DIR);
+            MakeDirectory(modsDir);
         }
         
         // Pasta intermediária de Logs Genéricos, caso não exista
@@ -297,6 +298,12 @@ class SDN_SeasonManager
     void SendWelcomeNotification(PlayerIdentity identity)
     {
         if (!m_IsLicensed)
+        {
+            return;
+        }
+
+        // NPE FIX: O jogador pode desconectar antes do CallLater estourar.
+        if (!identity)
         {
             return;
         }

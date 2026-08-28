@@ -14,6 +14,16 @@ modded class PlayerBase
     // Variável para amorteçer o jitter termodinâmico do EnvironmentHook
     float m_SDN_SmoothedTemp;
 
+    float GetSDNSmoothedTemp()
+    {
+        return m_SDN_SmoothedTemp;
+    }
+
+    void SetSDNSmoothedTemp(float val)
+    {
+        m_SDN_SmoothedTemp = val;
+    }
+
     override void Init()
     {
         super.Init();
